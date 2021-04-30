@@ -1,0 +1,161 @@
+// #include <analogWrite.h>
+
+
+// OTA stuff
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
+// /** GPIO for OTA request button */
+// int otaButton = 12;
+// /** Button class */
+// OneButton pushBt(otaButton, true, true);
+
+/** Function declarations */
+// void enableOTA(void);
+// void resetDevice(void);
+
+
+
+
+
+
+/** Flag if OTA is enabled */
+boolean otaStarted = false;
+
+/** Limit the progress output on serial */
+unsigned int lastProgress = 0;
+IPAddress ip;
+
+void setupOTA(){
+	ip = WiFi.localIP();
+	Serial.print("\nWiFi connected with IP ");
+	Serial.println(ip);
+	// // Attach the button functions
+	// pushBt.attachClick(enableOTA);
+	// pushBt.attachDoubleClick(resetDevice);
+}
+
+/**
+ * Initialize OTA server
+ * and start waiting for OTA requests
+ */
+void startOTA(void)
+{
+	
+	ArduinoOTA
+		// OTA request received
+		.onStart([]() {
+			String type;
+			if (ArduinoOTA.getCommand() == U_FLASH)
+				type = "sketch";
+			else // U_SPIFFS
+				type = "filesystem";
+
+			// NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+			Serial.println("Start updating " + type);
+			lastProgress = 0;
+			otaStarted = true;
+		})
+		.onEnd([]() {
+			// OTA is finished
+			Serial.println("\nEnd");
+		})
+		.onProgress([](unsigned int progress, unsigned int total) {
+			// Status report during OTA
+			if ((lastProgress == 0) || ((progress / (total / 100)) >= lastProgress + 5))
+			{
+				Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+				lastProgress = (progress / (total / 100));
+				if (lastProgress == 0)
+				{
+					lastProgress = 1;
+				}
+			}
+		})
+		.onError([](ota_error_t error) {
+			// Error occured during OTA, report it
+			Serial.printf("Error[%u]: ", error);
+			if (error == OTA_AUTH_ERROR)
+				Serial.println("Auth Failed");
+			else if (error == OTA_BEGIN_ERROR)
+				Serial.println("Begin Failed");
+			else if (error == OTA_CONNECT_ERROR)
+				Serial.println("Connect Failed");
+			else if (error == OTA_RECEIVE_ERROR)
+				Serial.println("Receive Failed");
+			else if (error == OTA_END_ERROR)
+				Serial.println("End Failed");
+		});
+
+	// Enable MDNS so device can be seen
+	ArduinoOTA.setMdnsEnabled(true);
+
+	// Create a unique name
+	// IPAddress ip = WiFi.localIP();
+	// String hostName = "ESP32-CAM" + ip.toString();
+	char hostName[] = "SMART_LedStrip_ESP32";
+	Serial.printf("Device is advertising as SMART_LedStrip_ESP32\n");
+	// Set the MDNS advertising name
+	ArduinoOTA.setHostname(hostName);
+	ArduinoOTA.setPort(3232);
+	// Start the OTA server
+	ArduinoOTA.begin();
+}
+
+/**
+ * Stop the OTA server
+ */
+void stopOTA(void)
+{
+	ArduinoOTA.end();
+}
+
+
+
+/**
+ * Handle button single click
+ */
+void enableOTA(void)
+{
+	// If OTA is not enabled
+	if (!otaStarted)
+	{
+		// Stop the camera servers
+#ifdef ENABLE_WEBSERVER
+		stopWebStream();
+#endif
+#ifdef ENABLE_RTSPSERVER
+		stopRTSP();
+#endif
+		delay(100);
+		Serial.println("OTA enabled");
+		// Start the OTA server
+		startOTA();
+		otaStarted = true;
+	}
+	else
+	{
+		// If OTA was enabled
+		otaStarted = false;
+		// Stop the OTA server
+		stopOTA();
+		// Restart the camera servers
+#ifdef ENABLE_WEBSERVER
+		initWebStream();
+#endif
+#ifdef ENABLE_RTSPSERVER
+		initRTSP();
+#endif
+	}
+}
+
+/** 
+ * Handle button double click
+ */
+void resetDevice(void)
+{
+	delay(100);
+	WiFi.disconnect();
+	esp_restart();
+}
