@@ -96,8 +96,6 @@ void loop()
 // This function will run every time Blynk connection is established
 // and sync all variables to server
 BLYNK_CONNECTED() {
-  //get data stored in virtual pin V0 from server
-  //  Blynk.syncVirtual(V0);
   Blynk.syncAll();
 }
 BLYNK_WRITE(V0){
